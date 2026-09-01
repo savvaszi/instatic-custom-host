@@ -29,6 +29,7 @@ import {
   RegisterVariantDelegateArgSchema,
 } from './schemas/media'
 import { CryptoDigestArgSchema, CryptoSignHmacArgSchema } from './schemas/crypto'
+import { MailSmtpSendArgSchema } from './schemas/mail'
 import {
   ContentEntriesCreateArgsSchema,
   ContentEntriesCreateManyArgsSchema,
@@ -142,6 +143,7 @@ export const ApiCallSchemas = {
   'cms.content.republishAll': apiCallSchema('cms.content.republishAll', ContentRepublishAllArgsSchema),
   'crypto.digest': apiCallSchema('crypto.digest', Type.Tuple([CryptoDigestArgSchema])),
   'crypto.signHmac': apiCallSchema('crypto.signHmac', Type.Tuple([CryptoSignHmacArgSchema])),
+  'mail.smtp.send': apiCallSchema('mail.smtp.send', Type.Tuple([MailSmtpSendArgSchema])),
 } satisfies Record<string, TSchema>
 
 // ---------------------------------------------------------------------------

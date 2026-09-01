@@ -7,6 +7,18 @@ import {
 } from '@core/plugins/manifest'
 
 describe('plugin manifest validation', () => {
+  it('accepts the host-provided SMTP permission', () => {
+    const manifest = parsePluginManifest({
+      id: 'acme.mail',
+      name: 'Mail',
+      version: '1.0.0',
+      apiVersion: 1,
+      permissions: ['mail.smtp'],
+    })
+
+    expect(manifest.permissions).toContain('mail.smtp')
+  })
+
   it('accepts a declarative admin-page plugin manifest', () => {
     const manifest = parsePluginManifest({
       id: 'local.map',

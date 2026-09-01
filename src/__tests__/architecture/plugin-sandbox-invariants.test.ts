@@ -204,6 +204,7 @@ describe('plugin sandbox invariants', () => {
       'cms.storage.update',
       'crypto.digest',
       'crypto.signHmac',
+      'mail.smtp.send',
       'network.abort',
       'network.fetch',
     ])

@@ -242,6 +242,14 @@ globalThis.__buildApi = function buildApi() {
     },
   }
 
+  const smtpApi = {
+    send: function (message: unknown) {
+      assertTargetPermission('mail.smtp.send')
+      if (!message || typeof message !== 'object') throw new TypeError('mail.smtp.send: message must be an object')
+      return call('mail.smtp.send', [message])
+    },
+  }
+
   // ---- media subsystem -----------------------------------------------------
   // Three independent surfaces under api.cms.media. The callbacks live INSIDE
   // the VM (stored under __plugin_handlers.mediaAdapters / mediaUrlTransformers);
@@ -397,6 +405,7 @@ globalThis.__buildApi = function buildApi() {
       loops: { registerSource: registerSource },
       settings: settingsApi,
       schedule: scheduleApi,
+      mail: { smtp: smtpApi },
       content: {
         // Schema introspection
         tables: {

@@ -35,6 +35,7 @@ import { handleNetworkFetch, handleNetworkAbort } from './handlers/network'
 import { handleScheduleRegister, handleScheduleCancel } from './handlers/schedule'
 import { handleMediaRegisterStorageAdapter, handleMediaRegisterUrlTransformer, handleMediaRegisterVariantDelegate } from './handlers/media'
 import { handleCryptoDigest, handleCryptoSignHmac } from './handlers/crypto'
+import { handleMailSmtpSend } from './handlers/mail'
 import {
   handleContentEntriesCreate,
   handleContentEntriesCreateMany,
@@ -97,6 +98,7 @@ const apiHandlers = {
   'cms.media.registerVariantDelegate': handleMediaRegisterVariantDelegate,
   'crypto.digest': handleCryptoDigest,
   'crypto.signHmac': handleCryptoSignHmac,
+  'mail.smtp.send': handleMailSmtpSend,
   'cms.content.tables.list': handleContentTablesList,
   'cms.content.tables.get': handleContentTablesGet,
   'cms.content.tables.create': handleContentTablesCreate,

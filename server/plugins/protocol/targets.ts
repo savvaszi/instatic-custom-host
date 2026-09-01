@@ -57,6 +57,7 @@ export const TARGET_PERMISSIONS = {
   'cms.storage.delete': 'cms.storage',
   // Network — outbound HTTP (allowlist enforced separately in host/network.ts).
   'network.fetch': 'network.outbound',
+  'mail.smtp.send': 'mail.smtp',
   // Scheduled jobs
   'cms.schedule.register': 'cms.schedule',
   'cms.schedule.cancel': 'cms.schedule',

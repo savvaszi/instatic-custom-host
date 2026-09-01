@@ -20,6 +20,7 @@ import type {
 import type { ServerPluginHooksApi } from './hooks'
 import type { LoopEntitySource } from './loops'
 import type { ServerPluginMediaApi } from './media'
+import type { ServerPluginMailApi } from './mail'
 import type { PluginMigrationContext } from './lifecycle'
 import type { PluginPermission } from './permissions'
 import type { ServerPluginRouteHandler } from './routes'
@@ -125,6 +126,8 @@ export interface ServerPluginApi {
      * dispatch and persists last-run state across restarts.
      */
     schedule: ServerPluginScheduleApi
+    /** Send through the plugin's configured TLS SMTP server. */
+    mail: ServerPluginMailApi
     /**
      * Read and write CMS content — entries (rows) and their parent tables.
      *

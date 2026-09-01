@@ -50,6 +50,7 @@ function extractHandlerTargets(source: string): string[] {
  * Changing any line here is a deliberate security decision, not a refactor.
  */
 const EXPECTED_TARGET_PERMISSIONS: Record<string, string> = {
+  'mail.smtp.send': 'mail.smtp',
   'cms.routes.register': 'cms.routes',
   'cms.hooks.on': 'cms.hooks',
   'cms.hooks.filter': 'cms.hooks',
