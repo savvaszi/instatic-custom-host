@@ -31,10 +31,11 @@ describe('CspPlan — serialization is deterministic and sorted', () => {
   it('sorts directives by name and sources within each directive', () => {
     const plan = createBaseCspPlan({ anyScriptTag: false })
     const csp = serializeCsp(plan)
-    // Directives alphabetical: default-src < frame-src < img-src < media-src
+    // Directives alphabetical: connect-src < default-src < frame-src < img-src < media-src
     //   < script-src < style-src < worker-src
     expect(csp).toBe(
-      "default-src 'self'; frame-src 'none'; img-src 'self' data: https:; " +
+      "connect-src 'self' https://analytics.google.com https://region1.google-analytics.com https://www.google-analytics.com; " +
+        "default-src 'self'; frame-src 'none'; img-src 'self' data: https:; " +
         "media-src 'self' data: https:; " +
         "script-src 'none'; style-src 'self' 'unsafe-inline'; worker-src 'none';",
     )

@@ -77,7 +77,7 @@ export function createBaseCspPlan(opts: {
   const plan = emptyCspPlan()
   setCspDirective(plan, 'default-src', ["'self'"])
 
-  const scriptSources = opts.anyScriptTag ? ["'self'"] : ["'none'"]
+  const scriptSources = opts.anyScriptTag ? ["'self'", 'https://www.googletagmanager.com'] : ["'none'"]
   if (opts.importmapSha) scriptSources.push(`'sha256-${opts.importmapSha}'`)
   setCspDirective(plan, 'script-src', scriptSources)
 
@@ -91,6 +91,12 @@ export function createBaseCspPlan(opts: {
   // invisible in the markup: the element is correct, the URL resolves, and
   // only the console says why nothing happens.
   setCspDirective(plan, 'media-src', ["'self'", 'data:', 'https:'])
+  setCspDirective(plan, 'connect-src', [
+    "'self'",
+    'https://analytics.google.com',
+    'https://region1.google-analytics.com',
+    'https://www.google-analytics.com',
+  ])
   setCspDirective(plan, 'frame-src', ["'none'"])
   setCspDirective(plan, 'worker-src', opts.anyScriptTag ? ["'self'", 'blob:'] : ["'none'"])
   return plan
