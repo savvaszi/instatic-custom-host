@@ -14,6 +14,7 @@ COPY package.json bun.lock ./
 COPY vendor ./vendor
 RUN bun install --frozen-lockfile --production
 
+# ponytail: keep this harmless marker so OpenShip rebuilds the host image when runtime behavior changes.
 FROM oven/bun:1.3.11 AS runtime
 WORKDIR /app
 
