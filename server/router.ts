@@ -94,6 +94,7 @@ const routes: readonly RouteHandler[] = [
   tryServeStaticAsset,
   tryServeUpload,
   tryServeAdminApp,
+  tryServeCanonicalHostRedirect,
   tryServeSeoFiles,
   tryServeLegacyRedirect,
   tryServePublicRoute,
@@ -492,6 +493,7 @@ async function tryServePublicRoute(req: Request, runtime: ServerRuntime, url: UR
 
 const LEGACY_REDIRECTS: Readonly<Record<string, string>> = {
   '/index': '/',
+  '/home': '/',
   '/about-us': '/about',
   '/contact-us': '/contact',
   '/book': '/contact',
@@ -501,6 +503,20 @@ const LEGACY_REDIRECTS: Readonly<Record<string, string>> = {
 
 function canonicalOrigin(runtime: ServerRuntime, url: URL): string {
   return (runtime.publicOrigin ?? url.origin).replace(/\/+$/, '')
+}
+
+function tryServeCanonicalHostRedirect(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Response | null {
+  if (req.method !== 'GET' || !runtime.publicOrigin) return null
+  const origin = canonicalOrigin(runtime, url)
+  const canonicalHost = new URL(origin).hostname.toLowerCase()
+  if (url.hostname.toLowerCase() !== `www.${canonicalHost}`) return null
+  return new Response(null, {
+    status: 301,
+    headers: {
+      'cache-control': 'public, max-age=86400',
+      location: `${origin}${url.pathname}${url.search}`,
+    },
+  })
 }
 
 function xmlEscape(value: string): string {
@@ -528,7 +544,7 @@ async function tryServeSeoFiles(req: Request, runtime: ServerRuntime, url: URL, 
 
   if (pathname !== '/sitemap.xml') return null
   const snapshot = await getLatestPublishedSiteSnapshot(runtime.db)
-  const pages = snapshot?.site.pages.filter((page) => !isTemplatePage(page)) ?? []
+  const pages = snapshot?.site.pages.filter((page) => !isTemplatePage(page) && page.slug !== 'home') ?? []
   const urls = pages.map((page) => {
     const path = page.slug === 'index' ? '/' : `/${page.slug}`
     return `  <url><loc>${xmlEscape(origin + path)}</loc></url>`
