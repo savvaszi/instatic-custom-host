@@ -4,6 +4,8 @@ import { tryHandleMcpOAuth } from './ai/mcp/oauth/handler'
 import { handleCmsRequest } from './handlers/cms'
 import type { DbClient } from './db/client'
 import { renderNotFoundResponse, renderPublicResolution } from './publish/publicRouter'
+import { getLatestPublishedSiteSnapshot } from './repositories/publish'
+import { isTemplatePage } from '@core/templates'
 import { readStaticAsset } from './publish/staticArtefact'
 import { getLatestSnapshotForVersion } from './publish/publishedSnapshotCache'
 import { getPublishVersion, registerVersionedCacheReset } from './publish/publishState'
@@ -29,6 +31,7 @@ interface ServerRuntime {
   db: DbClient
   staticDir?: string
   uploadsDir?: string
+  publicOrigin?: string
   /**
    * The raw `DATABASE_URL` the server booted with — forwarded down to
    * CMS handlers that need to resolve the on-disk SQLite file (e.g. the
@@ -91,6 +94,8 @@ const routes: readonly RouteHandler[] = [
   tryServeStaticAsset,
   tryServeUpload,
   tryServeAdminApp,
+  tryServeSeoFiles,
+  tryServeLegacyRedirect,
   tryServePublicRoute,
   trySetupRedirect,
   tryServeNotFoundPage,
@@ -483,6 +488,72 @@ async function tryServeAdminApp(
 async function tryServePublicRoute(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Promise<Response | null> {
   if (req.method !== 'GET') return null
   return await renderPublicResolution(runtime.db, url, runtime.uploadsDir)
+}
+
+const LEGACY_REDIRECTS: Readonly<Record<string, string>> = {
+  '/index': '/',
+  '/about-us': '/about',
+  '/contact-us': '/contact',
+  '/book': '/contact',
+  '/book-your-place': '/contact',
+  '/petrou-kyriakos': '/trainers/petrou-kyriakos',
+}
+
+function canonicalOrigin(runtime: ServerRuntime, url: URL): string {
+  return (runtime.publicOrigin ?? url.origin).replace(/\/+$/, '')
+}
+
+function xmlEscape(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&apos;',
+  })[character] ?? character)
+}
+
+async function tryServeSeoFiles(req: Request, runtime: ServerRuntime, url: URL, pathname: string): Promise<Response | null> {
+  if (req.method !== 'GET') return null
+  const origin = canonicalOrigin(runtime, url)
+
+  if (pathname === '/robots.txt') {
+    return new Response(`User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`, {
+      headers: {
+        'cache-control': 'public, max-age=3600',
+        'content-type': 'text/plain; charset=utf-8',
+      },
+    })
+  }
+
+  if (pathname !== '/sitemap.xml') return null
+  const snapshot = await getLatestPublishedSiteSnapshot(runtime.db)
+  const pages = snapshot?.site.pages.filter((page) => !isTemplatePage(page)) ?? []
+  const urls = pages.map((page) => {
+    const path = page.slug === 'index' ? '/' : `/${page.slug}`
+    return `  <url><loc>${xmlEscape(origin + path)}</loc></url>`
+  }).join('\n')
+  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
+  return new Response(body, {
+    headers: {
+      'cache-control': 'public, max-age=3600',
+      'content-type': 'application/xml; charset=utf-8',
+    },
+  })
+}
+
+function tryServeLegacyRedirect(req: Request, _runtime: ServerRuntime, url: URL, pathname: string): Response | null {
+  if (req.method !== 'GET') return null
+  const normalized = pathname.replace(/\/+$/, '') || '/'
+  const target = LEGACY_REDIRECTS[normalized]
+  if (!target) return null
+  return new Response(null, {
+    status: 301,
+    headers: {
+      'cache-control': 'public, max-age=86400',
+      location: `${target}${url.search}`,
+    },
+  })
 }
 
 /**
