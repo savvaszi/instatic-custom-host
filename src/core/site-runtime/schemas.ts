@@ -77,6 +77,22 @@ const SiteScriptFormatSchema = Type.Union([
 export type SiteScriptFormat = Static<typeof SiteScriptFormatSchema>
 
 // ---------------------------------------------------------------------------
+// SiteScriptCspSource
+// ---------------------------------------------------------------------------
+
+const SiteScriptCspSourceSchema = Type.Object({
+  directive: Type.Union([
+    Type.Literal('script-src'),
+    Type.Literal('connect-src'),
+    Type.Literal('img-src'),
+    Type.Literal('media-src'),
+  ]),
+  sources: Type.Array(Type.String()),
+})
+
+export type SiteScriptCspSource = Static<typeof SiteScriptCspSourceSchema>
+
+// ---------------------------------------------------------------------------
 // SiteAssetScope — discriminated union on `type`
 //
 // Shared by scripts AND stylesheets: both can target all pages, an explicit
@@ -107,6 +123,8 @@ const SiteScriptRuntimeConfigSchema = Type.Object({
   timing: SiteScriptTimingSchema,
   scope: SiteAssetScopeSchema,
   priority: Type.Number(),
+  /** Additional origins required by browser-side code loaded by this asset. */
+  cspSources: Type.Optional(Type.Array(SiteScriptCspSourceSchema)),
 })
 
 export type SiteScriptRuntimeConfig = Static<typeof SiteScriptRuntimeConfigSchema>

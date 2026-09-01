@@ -39,7 +39,11 @@ import type { SiteCssBundle } from './siteCssBundle'
 import { escapeHtml, isSafeUrl } from './utils'
 import { addCspSources, createBaseCspPlan, cspMetaTag } from './cspPlan'
 import type { PublishedPageRuntimeAssets } from '@core/site-runtime/schemas'
-import { hasPublishedRuntimeScripts, scriptTagsForRuntimeAssets } from '@core/site-runtime'
+import {
+  hasPublishedRuntimeScripts,
+  normalizeSiteRuntimeConfig,
+  scriptTagsForRuntimeAssets,
+} from '@core/site-runtime'
 import { renderNode } from './renderNode'
 import { findDynamicNodeIds } from './dynamicDetection'
 import { collectHoleSubtreeModuleIds } from './holeSubtreeModules'
@@ -455,6 +459,8 @@ function buildContentSecurityPolicy(
   anyScriptTag: boolean,
   importmap: PublishedRuntimePackageImportmap | undefined,
   moduleCspSources: ReadonlyMap<string, ReadonlySet<string>>,
+  runtimeAssets: PublishedPageRuntimeAssets | undefined,
+  site: SiteDocument,
 ): string {
   const plan = createBaseCspPlan({ anyScriptTag, importmapSha: importmap?.sha256 })
   // Merge per-page CSP requirements declared by module render() outputs.
@@ -464,6 +470,12 @@ function buildContentSecurityPolicy(
   // unaffected and keep frame-src 'none'.
   for (const [directive, sources] of moduleCspSources) {
     addCspSources(plan, directive, sources)
+  }
+  const runtime = normalizeSiteRuntimeConfig(site.runtime)
+  for (const asset of runtimeAssets?.scripts ?? []) {
+    for (const requirement of runtime.scripts[asset.fileId]?.cspSources ?? []) {
+      addCspSources(plan, requirement.directive, requirement.sources)
+    }
   }
   return `\n  ${cspMetaTag(plan)}`
 }
@@ -605,7 +617,13 @@ export function publishPage(
 
   const meta = buildDocumentMetaTags(site, page, templateContext, options.documentMeta)
   const runtime = buildRuntimeAssetsBlock(options, acc)
-  const csp = buildContentSecurityPolicy(runtime.anyScriptTag, runtime.importmap, acc.cspSources)
+  const csp = buildContentSecurityPolicy(
+    runtime.anyScriptTag,
+    runtime.importmap,
+    acc.cspSources,
+    options.runtimeAssets,
+    site,
+  )
 
   const html = assembleHtmlDocument({
     langAttr: meta.langAttr,

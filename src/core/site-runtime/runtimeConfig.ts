@@ -7,6 +7,7 @@ import type {
   SiteDependencyLock,
   SiteRuntimeConfig,
   SiteRuntimeTarget,
+  SiteScriptCspSource,
   SiteScriptRuntimeConfig,
   SiteStyleRuntimeConfig,
 } from './schemas'
@@ -51,6 +52,24 @@ export const DEFAULT_SCRIPT_RUNTIME_CONFIG: SiteScriptRuntimeConfig = {
   priority: 100,
 }
 
+function normalizeScriptCspSources(value: unknown): SiteScriptCspSource[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const sources: SiteScriptCspSource[] = []
+  for (const item of value) {
+    if (!isRecord(item)) continue
+    const directive = item.directive
+    if (
+      directive !== 'script-src' &&
+      directive !== 'connect-src' &&
+      directive !== 'img-src' &&
+      directive !== 'media-src'
+    ) continue
+    const values = stringArray(item.sources).filter(Boolean)
+    if (values.length > 0) sources.push({ directive, sources: values })
+  }
+  return sources.length > 0 ? sources : undefined
+}
+
 export const DEFAULT_STYLE_RUNTIME_CONFIG: SiteStyleRuntimeConfig = {
   enabled: true,
   scope: { type: 'all-pages' },
@@ -90,6 +109,7 @@ function normalizeAssetScope(raw: unknown): SiteAssetScope {
 export function normalizeScriptRuntimeConfig(raw: unknown): SiteScriptRuntimeConfig {
   if (!isRecord(raw)) return { ...DEFAULT_SCRIPT_RUNTIME_CONFIG }
 
+  const cspSources = normalizeScriptCspSources(raw.cspSources)
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_SCRIPT_RUNTIME_CONFIG.enabled,
     runInCanvas: typeof raw.runInCanvas === 'boolean' ? raw.runInCanvas : DEFAULT_SCRIPT_RUNTIME_CONFIG.runInCanvas,
@@ -104,6 +124,7 @@ export function normalizeScriptRuntimeConfig(raw: unknown): SiteScriptRuntimeCon
       : DEFAULT_SCRIPT_RUNTIME_CONFIG.timing,
     scope: normalizeAssetScope(raw.scope),
     priority: finiteNumberOr(raw.priority, DEFAULT_SCRIPT_RUNTIME_CONFIG.priority),
+    ...(cspSources ? { cspSources } : {}),
   }
 }
 
