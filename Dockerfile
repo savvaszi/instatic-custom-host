@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 FROM oven/bun:1.3.11 AS build
 WORKDIR /app
 # vendor/pixel-art-icons is a `file:` dep — `bun install` needs it on disk to
