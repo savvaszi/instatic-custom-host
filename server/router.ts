@@ -3,11 +3,11 @@ import { handleMcpHttp, MCP_ENDPOINT_PATH } from './ai/mcp'
 import { tryHandleMcpOAuth } from './ai/mcp/oauth/handler'
 import { handleCmsRequest } from './handlers/cms'
 import type { DbClient } from './db/client'
+import { renderPublicResolution } from './publish/publicRouter'
 import {
   tryServeCanonicalHostRedirect,
   tryServeLegacyRedirect,
   tryServeNotFoundPage,
-  tryServePublicRoute,
   tryServeSeoFiles,
   trySetupRedirect,
 } from './publish/publicRoutes'
@@ -31,7 +31,7 @@ import { mediaStorageRegistry } from '@core/plugins/mediaStorageRegistry'
 
 const VITE_DEV_URL = 'http://localhost:5173'
 
-export interface ServerRuntime {
+interface ServerRuntime {
   db: DbClient
   staticDir?: string
   uploadsDir?: string
@@ -52,7 +52,7 @@ export interface ServerRuntime {
  * a 404 themselves rather than falling through, so unknown paths under a
  * known prefix can't accidentally match a later route.
  */
-export type RouteHandler = (
+type RouteHandler = (
   req: Request,
   runtime: ServerRuntime,
   url: URL,
@@ -497,6 +497,21 @@ async function tryServeAdminApp(
   // Admin SPA isn't served from this port (dev mode, or production missing a
   // build). Tell the developer where to actually find it.
   return adminUiNotBuiltResponse(pathname)
+}
+
+/**
+ * Single entry for every visitor-facing HTML URL — stand-alone published
+ * pages (`/about`), content rows rendered through their postType's entry
+ * template (`/posts/hello-world`), and row-slug redirects.
+ *
+ * Resolution + render live in `server/publish/publicRouter.ts`.
+ * `renderPublicResolution` handles the full request: Layer A disk
+ * fast-path (pre-rendered static artefacts via `readArtefact`), then
+ * `resolvePublicRoute`, then the live renderer + `applyPublishedHtmlPipeline`.
+ */
+async function tryServePublicRoute(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Promise<Response | null> {
+  if (req.method !== 'GET') return null
+  return await renderPublicResolution(runtime.db, url, runtime.uploadsDir)
 }
 
 // ---------------------------------------------------------------------------

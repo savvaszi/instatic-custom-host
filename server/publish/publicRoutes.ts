@@ -1,13 +1,21 @@
 import { isTemplatePage } from '@core/templates'
+import type { DbClient } from '../db/client'
 import { getLatestPublishedSiteSnapshot } from '../repositories/publish'
 import { getSetupStatusCached } from '../repositories/setup'
-import type { RouteHandler, ServerRuntime } from '../router'
-import { renderNotFoundResponse, renderPublicResolution } from './publicRouter'
+import { renderNotFoundResponse } from './publicRouter'
 
-export const tryServePublicRoute: RouteHandler = async (req, runtime, url) => {
-  if (req.method !== 'GET') return null
-  return await renderPublicResolution(runtime.db, url, runtime.uploadsDir)
+interface PublicRouteRuntime {
+  db: DbClient
+  uploadsDir?: string
+  publicOrigin?: string
 }
+
+type PublicRouteHandler = (
+  req: Request,
+  runtime: PublicRouteRuntime,
+  url: URL,
+  pathname: string,
+) => Promise<Response | null> | Response | null
 
 const LEGACY_REDIRECTS: Readonly<Record<string, string>> = {
   '/index': '/',
@@ -19,11 +27,11 @@ const LEGACY_REDIRECTS: Readonly<Record<string, string>> = {
   '/petrou-kyriakos': '/trainers/petrou-kyriakos',
 }
 
-function canonicalOrigin(runtime: ServerRuntime, url: URL): string {
+function canonicalOrigin(runtime: PublicRouteRuntime, url: URL): string {
   return (runtime.publicOrigin ?? url.origin).replace(/\/+$/, '')
 }
 
-export const tryServeCanonicalHostRedirect: RouteHandler = (req, runtime, url) => {
+export const tryServeCanonicalHostRedirect: PublicRouteHandler = (req, runtime, url) => {
   if (req.method !== 'GET' || !runtime.publicOrigin) return null
   const origin = canonicalOrigin(runtime, url)
   const canonicalHost = new URL(origin).hostname.toLowerCase()
@@ -47,7 +55,7 @@ function xmlEscape(value: string): string {
   })[character] ?? character)
 }
 
-export const tryServeSeoFiles: RouteHandler = async (req, runtime, url, pathname) => {
+export const tryServeSeoFiles: PublicRouteHandler = async (req, runtime, url, pathname) => {
   if (req.method !== 'GET') return null
   const origin = canonicalOrigin(runtime, url)
 
@@ -76,7 +84,7 @@ export const tryServeSeoFiles: RouteHandler = async (req, runtime, url, pathname
   })
 }
 
-export const tryServeLegacyRedirect: RouteHandler = (req, _runtime, url, pathname) => {
+export const tryServeLegacyRedirect: PublicRouteHandler = (req, _runtime, url, pathname) => {
   if (req.method !== 'GET') return null
   const normalized = pathname.replace(/\/+$/, '') || '/'
   const target = LEGACY_REDIRECTS[normalized]
@@ -90,7 +98,7 @@ export const tryServeLegacyRedirect: RouteHandler = (req, _runtime, url, pathnam
   })
 }
 
-export const trySetupRedirect: RouteHandler = async (req, runtime) => {
+export const trySetupRedirect: PublicRouteHandler = async (req, runtime) => {
   if (req.method !== 'GET') return null
   const setupStatus = await getSetupStatusCached(runtime.db)
   return setupStatus.needsSetup
@@ -98,7 +106,7 @@ export const trySetupRedirect: RouteHandler = async (req, runtime) => {
     : null
 }
 
-export const tryServeNotFoundPage: RouteHandler = async (req, runtime, url) => {
+export const tryServeNotFoundPage: PublicRouteHandler = async (req, runtime, url) => {
   if (req.method !== 'GET') return null
   return await renderNotFoundResponse(runtime.db, url, runtime.uploadsDir)
 }
