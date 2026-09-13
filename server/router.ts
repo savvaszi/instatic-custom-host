@@ -3,14 +3,18 @@ import { handleMcpHttp, MCP_ENDPOINT_PATH } from './ai/mcp'
 import { tryHandleMcpOAuth } from './ai/mcp/oauth/handler'
 import { handleCmsRequest } from './handlers/cms'
 import type { DbClient } from './db/client'
-import { renderNotFoundResponse, renderPublicResolution } from './publish/publicRouter'
-import { getLatestPublishedSiteSnapshot } from './repositories/publish'
-import { isTemplatePage } from '@core/templates'
+import {
+  tryServeCanonicalHostRedirect,
+  tryServeLegacyRedirect,
+  tryServeNotFoundPage,
+  tryServePublicRoute,
+  tryServeSeoFiles,
+  trySetupRedirect,
+} from './publish/publicRoutes'
 import { readStaticAsset } from './publish/staticArtefact'
 import { getLatestSnapshotForVersion } from './publish/publishedSnapshotCache'
 import { getPublishVersion, registerVersionedCacheReset } from './publish/publishState'
 import { prefetchMediaAssets } from './publish/mediaPrefetch'
-import { getSetupStatusCached } from './repositories/setup'
 import { getPublishedRuntimeAsset } from './repositories/runtimeAsset'
 import { handleLoopRequest, isLoopRuntimeAssetPath, serveLoopRuntimeAsset } from './handlers/cms/loop'
 import { handleHoleRequest, isHoleRuntimeAssetPath, serveHoleRuntimeAsset } from './handlers/cms/hole'
@@ -27,7 +31,7 @@ import { mediaStorageRegistry } from '@core/plugins/mediaStorageRegistry'
 
 const VITE_DEV_URL = 'http://localhost:5173'
 
-interface ServerRuntime {
+export interface ServerRuntime {
   db: DbClient
   staticDir?: string
   uploadsDir?: string
@@ -48,7 +52,7 @@ interface ServerRuntime {
  * a 404 themselves rather than falling through, so unknown paths under a
  * known prefix can't accidentally match a later route.
  */
-type RouteHandler = (
+export type RouteHandler = (
   req: Request,
   runtime: ServerRuntime,
   url: URL,
@@ -493,129 +497,6 @@ async function tryServeAdminApp(
   // Admin SPA isn't served from this port (dev mode, or production missing a
   // build). Tell the developer where to actually find it.
   return adminUiNotBuiltResponse(pathname)
-}
-
-/**
- * Single entry for every visitor-facing HTML URL — stand-alone published
- * pages (`/about`), content rows rendered through their postType's entry
- * template (`/posts/hello-world`), and row-slug redirects.
- *
- * Resolution + render live in `server/publish/publicRouter.ts`.
- * `renderPublicResolution` handles the full request: Layer A disk
- * fast-path (pre-rendered static artefacts via `readArtefact`), then
- * `resolvePublicRoute`, then the live renderer + `applyPublishedHtmlPipeline`.
- */
-async function tryServePublicRoute(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Promise<Response | null> {
-  if (req.method !== 'GET') return null
-  return await renderPublicResolution(runtime.db, url, runtime.uploadsDir)
-}
-
-const LEGACY_REDIRECTS: Readonly<Record<string, string>> = {
-  '/index': '/',
-  '/home': '/',
-  '/about-us': '/about',
-  '/contact-us': '/contact',
-  '/book': '/contact',
-  '/book-your-place': '/contact',
-  '/petrou-kyriakos': '/trainers/petrou-kyriakos',
-}
-
-function canonicalOrigin(runtime: ServerRuntime, url: URL): string {
-  return (runtime.publicOrigin ?? url.origin).replace(/\/+$/, '')
-}
-
-function tryServeCanonicalHostRedirect(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Response | null {
-  if (req.method !== 'GET' || !runtime.publicOrigin) return null
-  const origin = canonicalOrigin(runtime, url)
-  const canonicalHost = new URL(origin).hostname.toLowerCase()
-  if (url.hostname.toLowerCase() !== `www.${canonicalHost}`) return null
-  return new Response(null, {
-    status: 301,
-    headers: {
-      'cache-control': 'public, max-age=86400',
-      location: `${origin}${url.pathname}${url.search}`,
-    },
-  })
-}
-
-function xmlEscape(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&apos;',
-  })[character] ?? character)
-}
-
-async function tryServeSeoFiles(req: Request, runtime: ServerRuntime, url: URL, pathname: string): Promise<Response | null> {
-  if (req.method !== 'GET') return null
-  const origin = canonicalOrigin(runtime, url)
-
-  if (pathname === '/robots.txt') {
-    return new Response(`User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`, {
-      headers: {
-        'cache-control': 'public, max-age=3600',
-        'content-type': 'text/plain; charset=utf-8',
-      },
-    })
-  }
-
-  if (pathname !== '/sitemap.xml') return null
-  const snapshot = await getLatestPublishedSiteSnapshot(runtime.db)
-  const pages = snapshot?.site.pages.filter((page) => !isTemplatePage(page) && page.slug !== 'home') ?? []
-  const urls = pages.map((page) => {
-    const path = page.slug === 'index' ? '/' : `/${page.slug}`
-    return `  <url><loc>${xmlEscape(origin + path)}</loc></url>`
-  }).join('\n')
-  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
-  return new Response(body, {
-    headers: {
-      'cache-control': 'public, max-age=3600',
-      'content-type': 'application/xml; charset=utf-8',
-    },
-  })
-}
-
-function tryServeLegacyRedirect(req: Request, _runtime: ServerRuntime, url: URL, pathname: string): Response | null {
-  if (req.method !== 'GET') return null
-  const normalized = pathname.replace(/\/+$/, '') || '/'
-  const target = LEGACY_REDIRECTS[normalized]
-  if (!target) return null
-  return new Response(null, {
-    status: 301,
-    headers: {
-      'cache-control': 'public, max-age=86400',
-      location: `${target}${url.search}`,
-    },
-  })
-}
-
-/**
- * On a fresh install with no admin user yet, bounce the visitor to /admin so
- * they land in the setup wizard instead of seeing a confusing 404. Returns
- * null when the install is already past setup.
- */
-async function trySetupRedirect(req: Request, runtime: ServerRuntime, _url: URL, _pathname: string): Promise<Response | null> {
-  if (req.method !== 'GET') return null
-  // Sticky memo: once setup completes, this stops querying. Without it every
-  // unmatched GET (bot probes, 404s) paid two COUNT queries forever.
-  const setupStatus = await getSetupStatusCached(runtime.db)
-  return setupStatus.needsSetup
-    ? new Response(null, { status: 302, headers: { location: '/admin' } })
-    : null
-}
-
-/**
- * Last route before the dispatcher's bare JSON 404: serve the site's designed
- * 404 page (the `notFound` template) for any GET no other route claimed.
- * Namespaced prefixes (`/admin/api/*`, `/_instatic/*`, `/uploads/*`) never
- * reach here — they absorb their namespace and emit their own 404s. Returns
- * null (→ JSON 404) when the published site has no notFound template.
- */
-async function tryServeNotFoundPage(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Promise<Response | null> {
-  if (req.method !== 'GET') return null
-  return await renderNotFoundResponse(runtime.db, url, runtime.uploadsDir)
 }
 
 // ---------------------------------------------------------------------------
