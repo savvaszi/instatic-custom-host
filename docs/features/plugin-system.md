@@ -1081,6 +1081,19 @@ First install still goes through the admin UI (`/admin/plugins` → Upload Plugi
 7. **Install via admin UI** (`/admin/plugins` → Upload Plugin), approve permissions.
 8. **Iterate** with `bun instatic-plugin dev`.
 
+## Bundled plugin catalog
+
+This distribution ships selected plugin archives in `public/bundled-plugins/` and describes them in `src/core/plugins/bundledCatalog.ts`. They appear under **Admin → Plugins → Bundled plugins** on every installation.
+
+Bundling only makes a package discoverable. Selecting **Review & install** uses the normal package-inspection, permission-review, step-up, lifecycle and audit paths. No bundled plugin is silently installed or granted permissions.
+
+To update a bundled plugin:
+
+1. Build and test the plugin in its own repository.
+2. Replace its archive under `public/bundled-plugins/`.
+3. Update the matching catalog version.
+4. Run `bun test src/__tests__/plugins/bundledPlugins.test.ts` to verify the archive and catalog agree.
+
 ### Cookbook: a server route + storage collection
 
 ```js

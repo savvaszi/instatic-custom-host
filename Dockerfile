@@ -24,9 +24,9 @@ ARG INSTATIC_CREATED=unknown
 
 LABEL org.opencontainers.image.title="Instatic"
 LABEL org.opencontainers.image.description="Self-hosted CMS with an integrated visual editor."
-LABEL org.opencontainers.image.source="https://github.com/corebunch/instatic"
-LABEL org.opencontainers.image.url="https://github.com/corebunch/instatic"
-LABEL org.opencontainers.image.documentation="https://github.com/corebunch/instatic/tree/main/docs/deployment"
+LABEL org.opencontainers.image.source="https://github.com/savvaszi/instatic-custom-host"
+LABEL org.opencontainers.image.url="https://github.com/savvaszi/instatic-custom-host"
+LABEL org.opencontainers.image.documentation="https://github.com/savvaszi/instatic-custom-host/tree/main/docs/deployment"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.version="${INSTATIC_VERSION}"
 LABEL org.opencontainers.image.revision="${INSTATIC_REVISION}"
