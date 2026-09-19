@@ -1,4 +1,4 @@
-FROM ghcr.io/corebunch/instatic:latest
+FROM ghcr.io/corebunch/instatic:0.0.19
 
 # Keep the upstream runtime byte-for-byte except for the publisher CSP fix.
 COPY src/core/publisher/cspPlan.ts /app/src/core/publisher/cspPlan.ts
