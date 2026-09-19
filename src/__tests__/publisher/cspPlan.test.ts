@@ -35,10 +35,16 @@ describe('CspPlan — serialization is deterministic and sorted', () => {
     //   < script-src < style-src < worker-src
     expect(csp).toBe(
       "connect-src 'self' https://analytics.google.com https://region1.google-analytics.com https://www.google-analytics.com; " +
-        "default-src 'self'; frame-src 'none'; img-src 'self' data: https:; " +
+        "default-src 'self'; frame-src 'self' https://www.google.com; img-src 'self' data: https:; " +
         "media-src 'self' data: https:; " +
         "script-src 'none'; style-src 'self' 'unsafe-inline'; worker-src 'none';",
     )
+  })
+
+  it('allows consent-gated Google Maps embeds from imported site scripts', () => {
+    const csp = serializeCsp(createBaseCspPlan({ anyScriptTag: true }))
+    expect(csp).toContain("frame-src 'self' https://www.google.com;")
+    expect(csp).not.toContain('https://maps.google.com')
   })
 
   it('lets a cross-origin video load, exactly like a cross-origin image', () => {
@@ -224,14 +230,14 @@ describe('publishPage — CSP frame-src from module cspSources', () => {
     expect(csp).not.toContain("frame-src 'none'")
   })
 
-  it('page with no video keeps frame-src none (no youtube leakage)', () => {
+  it('page with no video keeps only the base frame sources (no youtube leakage)', () => {
     const page = makePage({
       root: { moduleId: 'test.plain', props: {} },
     })
     const reg = makeRegistry({ 'test.plain': makeModule('test.plain') })
     const { html } = publishPage(page, makeSite(), reg)
     const csp = extractPublishedCsp(html)
-    expect(csp).toContain("frame-src 'none'")
+    expect(csp).toContain("frame-src 'self' https://www.google.com")
     expect(csp).not.toContain('youtube')
   })
 

@@ -97,7 +97,9 @@ export function createBaseCspPlan(opts: {
     'https://region1.google-analytics.com',
     'https://www.google-analytics.com',
   ])
-  setCspDirective(plan, 'frame-src', ["'none'"])
+  // Imported sites can create consent-gated Google Maps frames from their own
+  // runtime scripts, outside the module renderer's cspSources collection.
+  setCspDirective(plan, 'frame-src', ["'self'", 'https://www.google.com'])
   setCspDirective(plan, 'worker-src', opts.anyScriptTag ? ["'self'", 'blob:'] : ["'none'"])
   return plan
 }
