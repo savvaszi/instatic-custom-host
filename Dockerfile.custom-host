@@ -2,9 +2,9 @@ FROM ghcr.io/corebunch/instatic:0.0.19
 
 # Keep the upstream runtime intact and patch only the two imported-site gaps.
 USER root
-RUN sed -i "s@setCspDirective(plan, 'frame-src', \[\"'none'\"\])@setCspDirective(plan, 'frame-src', [\"'self'\", 'https://www.google.com'])@" /app/src/core/publisher/cspPlan.ts \
+RUN sed -i "s@setCspDirective(plan, 'frame-src', \[\"'none'\"\])@setCspDirective(plan, 'frame-src', [\"'self'\", 'https://www.google.com', 'https://maps.google.com'])@" /app/src/core/publisher/cspPlan.ts \
   && sed -i "s@return stripped + '.html'@return stripped.endsWith('.html') ? stripped : stripped + '.html'@" /app/server/publish/staticArtefact.ts \
-  && grep -F "frame-src', [\"'self'\", 'https://www.google.com']" /app/src/core/publisher/cspPlan.ts \
+  && grep -F "frame-src', [\"'self'\", 'https://www.google.com', 'https://maps.google.com']" /app/src/core/publisher/cspPlan.ts \
   && grep -F "stripped.endsWith('.html')" /app/server/publish/staticArtefact.ts \
   && chown bun:bun /app/src/core/publisher/cspPlan.ts /app/server/publish/staticArtefact.ts
 USER bun
