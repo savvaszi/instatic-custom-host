@@ -464,10 +464,8 @@ function buildContentSecurityPolicy(
 ): string {
   const plan = createBaseCspPlan({ anyScriptTag, importmapSha: importmap?.sha256 })
   // Merge per-page CSP requirements declared by module render() outputs.
-  // addCspSources automatically drops the lone 'none' when real sources are
-  // added, so frame-src 'none' becomes frame-src <origins> on pages that
-  // embed external iframes (e.g. YouTube). Pages with no such embeds are
-  // unaffected and keep frame-src 'none'.
+  // Module frame origins (for example YouTube) are added to the base frame
+  // sources only on pages that render those modules.
   for (const [directive, sources] of moduleCspSources) {
     addCspSources(plan, directive, sources)
   }

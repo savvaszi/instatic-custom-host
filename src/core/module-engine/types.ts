@@ -101,7 +101,7 @@ export interface RenderOutput {
    *
    * The publisher collects these per-page and merges them into the CSP plan
    * so that only pages that actually embed an external resource carry relaxed
-   * directives. A page with no YouTube embeds keeps `frame-src 'none'`; a
+   * directives. A page with no YouTube embeds keeps the base frame sources; a
    * page with one YouTube node gets `frame-src https://www.youtube.com
    * https://www.youtube-nocookie.com`.
    *

@@ -184,7 +184,7 @@ interface YoutubeRenderInput {
  * CSP frame-src origins required when a YouTube embed is rendered.
  * Declared on every YouTube render so the publisher can lift frame-src
  * from 'none' to these origins — but ONLY on pages that actually embed
- * YouTube. Pages with no YouTube nodes keep frame-src 'none'.
+ * YouTube. Pages with no YouTube nodes keep only the base frame sources.
  * youtube-nocookie.com is included because the embed URL may use that
  * domain when privacy-enhanced mode is configured in the future.
  */
