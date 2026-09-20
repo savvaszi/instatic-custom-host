@@ -3,14 +3,18 @@ import { handleMcpHttp, MCP_ENDPOINT_PATH } from './ai/mcp'
 import { tryHandleMcpOAuth } from './ai/mcp/oauth/handler'
 import { handleCmsRequest } from './handlers/cms'
 import type { DbClient } from './db/client'
-import { renderNotFoundResponse, renderPublicResolution } from './publish/publicRouter'
-import { getLatestPublishedSiteSnapshot } from './repositories/publish'
-import { isTemplatePage } from '@core/templates'
+import { renderPublicResolution } from './publish/publicRouter'
+import {
+  tryServeCanonicalHostRedirect,
+  tryServeLegacyRedirect,
+  tryServeNotFoundPage,
+  tryServeSeoFiles,
+  trySetupRedirect,
+} from './publish/publicRoutes'
 import { readStaticAsset } from './publish/staticArtefact'
 import { getLatestSnapshotForVersion } from './publish/publishedSnapshotCache'
 import { getPublishVersion, registerVersionedCacheReset } from './publish/publishState'
 import { prefetchMediaAssets } from './publish/mediaPrefetch'
-import { getSetupStatusCached } from './repositories/setup'
 import { getPublishedRuntimeAsset } from './repositories/runtimeAsset'
 import { handleLoopRequest, isLoopRuntimeAssetPath, serveLoopRuntimeAsset } from './handlers/cms/loop'
 import { handleHoleRequest, isHoleRuntimeAssetPath, serveHoleRuntimeAsset } from './handlers/cms/hole'
@@ -251,6 +255,19 @@ function tryServePublicForm(req: Request, runtime: ServerRuntime, url: URL, path
 async function tryServeRuntimeAsset(req: Request, runtime: ServerRuntime, _url: URL, pathname: string): Promise<Response | null> {
   if (req.method !== 'GET' || !pathname.startsWith('/_instatic/assets/')) return null
 
+  // Allowlist the asset kinds the publisher emits here (JS/CSS/maps/fonts/raster).
+  // An unrecognised extension is a hard 404, so a file planted in the published
+  // tree (e.g. an SVG) is never served back as active content (GHSA-5h25).
+  const contentType = contentTypeForAssetPath(pathname)
+  if (!contentType) return new Response('Not found', { status: 404 })
+
+  // No CSP is set for non-admin paths globally, so deny scripting and MIME
+  // sniffing on what we do serve here.
+  const hardening = {
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': "default-src 'none'",
+  }
+
   // Disk-first: a full publish bakes the runtime JS into the active slot, so
   // published pages serve their scripts straight off disk (no DB round-trip,
   // no rebuild). Content-hashed filenames keep `immutable` caching correct.
@@ -259,8 +276,9 @@ async function tryServeRuntimeAsset(req: Request, runtime: ServerRuntime, _url: 
     if (bytes) {
       return binaryResponse(bytes, {
         headers: {
-          'content-type': contentTypeForAssetPath(pathname),
+          'content-type': contentType,
           'cache-control': 'public, max-age=31536000, immutable',
+          ...hardening,
         },
       })
     }
@@ -274,16 +292,21 @@ async function tryServeRuntimeAsset(req: Request, runtime: ServerRuntime, _url: 
     headers: {
       'content-type': runtimeAsset.contentType,
       'cache-control': 'public, max-age=31536000, immutable',
+      ...hardening,
     },
   })
 }
 
 /** Derive a response content-type for a baked static asset from its extension. */
-function contentTypeForAssetPath(pathname: string): string {
+/**
+ * Content type for a `/_instatic/assets/*` path, or `null` when the extension
+ * is not one the publisher emits here — an allowlist, so `null` means the
+ * caller 404s rather than serving active content like SVG/HTML (GHSA-5h25).
+ */
+function contentTypeForAssetPath(pathname: string): string | null {
   if (pathname.endsWith('.js') || pathname.endsWith('.mjs')) return 'text/javascript; charset=utf-8'
   if (pathname.endsWith('.css')) return 'text/css; charset=utf-8'
   if (pathname.endsWith('.map') || pathname.endsWith('.json')) return 'application/json; charset=utf-8'
-  if (pathname.endsWith('.svg')) return 'image/svg+xml'
   if (pathname.endsWith('.png')) return 'image/png'
   if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) return 'image/jpeg'
   if (pathname.endsWith('.gif')) return 'image/gif'
@@ -293,7 +316,7 @@ function contentTypeForAssetPath(pathname: string): string {
   if (pathname.endsWith('.woff')) return 'font/woff'
   if (pathname.endsWith('.ttf')) return 'font/ttf'
   if (pathname.endsWith('.otf')) return 'font/otf'
-  return 'application/octet-stream'
+  return null
 }
 
 /**
@@ -489,114 +512,6 @@ async function tryServeAdminApp(
 async function tryServePublicRoute(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Promise<Response | null> {
   if (req.method !== 'GET') return null
   return await renderPublicResolution(runtime.db, url, runtime.uploadsDir)
-}
-
-const LEGACY_REDIRECTS: Readonly<Record<string, string>> = {
-  '/index': '/',
-  '/home': '/',
-  '/about-us': '/about',
-  '/contact-us': '/contact',
-  '/book': '/contact',
-  '/book-your-place': '/contact',
-  '/petrou-kyriakos': '/trainers/petrou-kyriakos',
-}
-
-function canonicalOrigin(runtime: ServerRuntime, url: URL): string {
-  return (runtime.publicOrigin ?? url.origin).replace(/\/+$/, '')
-}
-
-function tryServeCanonicalHostRedirect(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Response | null {
-  if (req.method !== 'GET' || !runtime.publicOrigin) return null
-  const origin = canonicalOrigin(runtime, url)
-  const canonicalHost = new URL(origin).hostname.toLowerCase()
-  if (url.hostname.toLowerCase() !== `www.${canonicalHost}`) return null
-  return new Response(null, {
-    status: 301,
-    headers: {
-      'cache-control': 'public, max-age=86400',
-      location: `${origin}${url.pathname}${url.search}`,
-    },
-  })
-}
-
-function xmlEscape(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&apos;',
-  })[character] ?? character)
-}
-
-async function tryServeSeoFiles(req: Request, runtime: ServerRuntime, url: URL, pathname: string): Promise<Response | null> {
-  if (req.method !== 'GET') return null
-  const origin = canonicalOrigin(runtime, url)
-
-  if (pathname === '/robots.txt') {
-    return new Response(`User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`, {
-      headers: {
-        'cache-control': 'public, max-age=3600',
-        'content-type': 'text/plain; charset=utf-8',
-      },
-    })
-  }
-
-  if (pathname !== '/sitemap.xml') return null
-  const snapshot = await getLatestPublishedSiteSnapshot(runtime.db)
-  const pages = snapshot?.site.pages.filter((page) => !isTemplatePage(page) && page.slug !== 'home') ?? []
-  const urls = pages.map((page) => {
-    const path = page.slug === 'index' ? '/' : `/${page.slug}`
-    return `  <url><loc>${xmlEscape(origin + path)}</loc></url>`
-  }).join('\n')
-  const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`
-  return new Response(body, {
-    headers: {
-      'cache-control': 'public, max-age=3600',
-      'content-type': 'application/xml; charset=utf-8',
-    },
-  })
-}
-
-function tryServeLegacyRedirect(req: Request, _runtime: ServerRuntime, url: URL, pathname: string): Response | null {
-  if (req.method !== 'GET') return null
-  const normalized = pathname.replace(/\/+$/, '') || '/'
-  const target = LEGACY_REDIRECTS[normalized]
-  if (!target) return null
-  return new Response(null, {
-    status: 301,
-    headers: {
-      'cache-control': 'public, max-age=86400',
-      location: `${target}${url.search}`,
-    },
-  })
-}
-
-/**
- * On a fresh install with no admin user yet, bounce the visitor to /admin so
- * they land in the setup wizard instead of seeing a confusing 404. Returns
- * null when the install is already past setup.
- */
-async function trySetupRedirect(req: Request, runtime: ServerRuntime, _url: URL, _pathname: string): Promise<Response | null> {
-  if (req.method !== 'GET') return null
-  // Sticky memo: once setup completes, this stops querying. Without it every
-  // unmatched GET (bot probes, 404s) paid two COUNT queries forever.
-  const setupStatus = await getSetupStatusCached(runtime.db)
-  return setupStatus.needsSetup
-    ? new Response(null, { status: 302, headers: { location: '/admin' } })
-    : null
-}
-
-/**
- * Last route before the dispatcher's bare JSON 404: serve the site's designed
- * 404 page (the `notFound` template) for any GET no other route claimed.
- * Namespaced prefixes (`/admin/api/*`, `/_instatic/*`, `/uploads/*`) never
- * reach here — they absorb their namespace and emit their own 404s. Returns
- * null (→ JSON 404) when the published site has no notFound template.
- */
-async function tryServeNotFoundPage(req: Request, runtime: ServerRuntime, url: URL, _pathname: string): Promise<Response | null> {
-  if (req.method !== 'GET') return null
-  return await renderNotFoundResponse(runtime.db, url, runtime.uploadsDir)
 }
 
 // ---------------------------------------------------------------------------

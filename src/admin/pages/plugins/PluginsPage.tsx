@@ -6,7 +6,11 @@ import { PluginRemoveDialog } from './components/PluginRemoveDialog/PluginRemove
 import { PermissionReviewSection } from './components/PermissionReviewSection'
 import { PluginSettingsDialog } from './components/PluginSettingsDialog/PluginSettingsDialog'
 import { PluginSchedulesDialog } from './components/PluginSchedulesDialog/PluginSchedulesDialog'
-import { isSandboxRelatedError, usePluginsWorkspace } from './hooks/usePluginsWorkspace'
+import {
+  BUNDLED_PLUGINS,
+  isSandboxRelatedError,
+  usePluginsWorkspace,
+} from './hooks/usePluginsWorkspace'
 import { notifyCmsPluginsChanged } from './utils/pluginEvents'
 import { useAuthenticatedAdminUser } from '@admin/sessionContext'
 import {
@@ -128,6 +132,38 @@ export function PluginsPage() {
             onCancel={() => vm.setPendingInstall(null)}
             onConfirm={() => void vm.installPendingPlugin(pendingInstall)}
           />
+        )}
+
+        {canInstall && (
+          <section className={styles.bundledSection} aria-labelledby="bundled-plugins-title">
+            <div>
+              <h2 id="bundled-plugins-title">Bundled plugins</h2>
+              <p>Included with this Instatic distribution. Review permissions before installing.</p>
+            </div>
+            <div className={styles.bundledGrid}>
+              {BUNDLED_PLUGINS.map((plugin) => {
+                const installed = payload.plugins.find((candidate) => candidate.id === plugin.id)
+                const current = installed?.version === plugin.version
+                return (
+                  <article key={plugin.id} className={styles.bundledCard}>
+                    <div>
+                      <strong>{plugin.name}</strong>
+                      <span>v{plugin.version}</span>
+                      <p>{plugin.description}</p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={uploading || current}
+                      onClick={() => void vm.prepareBundledPlugin(plugin)}
+                    >
+                      {current ? 'Installed' : installed ? 'Review update' : 'Review & install'}
+                    </Button>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
         )}
 
         <div

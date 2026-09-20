@@ -31,8 +31,11 @@ import {
 import { notifyCmsPluginsChanged } from '../utils/pluginEvents'
 import { subscribePluginEvents } from '../utils/pluginEventStream'
 import { getErrorMessage } from '@core/utils/errorMessage'
-import { ApiError } from '@core/http'
+import { ApiError, apiBlobRequest } from '@core/http'
+import { BUNDLED_PLUGINS, type BundledPlugin } from '@core/plugins/bundledCatalog'
 import { pushToast } from '@ui/components/Toast'
+
+export { BUNDLED_PLUGINS }
 
 /**
  * Per-install state for the confirmation dialog. The dialog renders different
@@ -109,6 +112,7 @@ interface PluginsWorkspaceVM extends WorkspaceLoadState {
   // Async actions.
   loadPlugins: () => Promise<void>
   handleUpload: (event: ChangeEvent<HTMLInputElement>) => Promise<void>
+  prepareBundledPlugin: (plugin: BundledPlugin) => Promise<void>
   installPendingPlugin: (
     pending: PendingInstall,
     grantedPermissions?: PluginPermission[],
@@ -297,39 +301,50 @@ export function usePluginsWorkspace(): PluginsWorkspaceVM {
     setUploading(true)
     setError(null)
     try {
-      const isZip = file.name.toLowerCase().endsWith('.zip')
-      const manifest = isZip
-        ? await inspectCmsPluginPackage(file)
-        : parsePluginManifest(JSON.parse(await file.text()))
-
-      // Detect upgrade vs. fresh install client-side so we can render the
-      // right copy in the confirmation dialog. The server detects upgrades
-      // independently — this is purely a UX hint.
-      const existing = payload.plugins.find((p) => p.id === manifest.id)
-      const upgradeFromVersion =
-        existing && existing.version !== manifest.version ? existing.version : undefined
-      const previouslyGrantedPermissions = existing
-        ? existing.grantedPermissions
-        : undefined
-      const previousNetworkAllowedHosts = existing?.manifest.networkAllowedHosts
-
-      // EVERY install and upgrade goes through the review dialog — including
-      // a zero-permission declarative plugin, which renders "No permissions
-      // requested" so the operator consciously approves what lands in their
-      // CMS. Nothing installs silently.
-      setPendingInstall({
-        manifest,
-        file: isZip ? file : undefined,
-        upgradeFromVersion,
-        previouslyGrantedPermissions,
-        ...(previousNetworkAllowedHosts !== undefined
-          ? { previousNetworkAllowedHosts }
-          : {}),
-      })
+      await stagePluginFile(file)
     } catch (err) {
       setError(getErrorMessage(err, 'Could not install plugin'))
     }
     setUploading(false)
+  }
+
+  async function prepareBundledPlugin(plugin: BundledPlugin): Promise<void> {
+    setUploading(true)
+    setError(null)
+    try {
+      const blob = await apiBlobRequest(`/bundled-plugins/${plugin.fileName}`, {
+        fallbackMessage: `Could not load ${plugin.name}`,
+      })
+      await stagePluginFile(new File([blob], plugin.fileName, { type: 'application/zip' }))
+    } catch (err) {
+      setError(getErrorMessage(err, `Could not load ${plugin.name}`))
+    }
+    setUploading(false)
+  }
+
+  async function stagePluginFile(file: File): Promise<void> {
+    const isZip = file.name.toLowerCase().endsWith('.zip')
+    const manifest = isZip
+      ? await inspectCmsPluginPackage(file)
+      : parsePluginManifest(JSON.parse(await file.text()))
+
+    const existing = payload.plugins.find((plugin) => plugin.id === manifest.id)
+    const upgradeFromVersion =
+      existing && existing.version !== manifest.version ? existing.version : undefined
+    const previouslyGrantedPermissions = existing?.grantedPermissions
+    const previousNetworkAllowedHosts = existing?.manifest.networkAllowedHosts
+
+    // Bundled and uploaded plugins share the same permission review. Bundling
+    // changes discovery, never the owner's consent boundary.
+    setPendingInstall({
+      manifest,
+      file: isZip ? file : undefined,
+      upgradeFromVersion,
+      previouslyGrantedPermissions,
+      ...(previousNetworkAllowedHosts !== undefined
+        ? { previousNetworkAllowedHosts }
+        : {}),
+    })
   }
 
   async function togglePlugin(plugin: InstalledPlugin): Promise<void> {
@@ -471,6 +486,7 @@ export function usePluginsWorkspace(): PluginsWorkspaceVM {
     setRemoveFailure,
     loadPlugins,
     handleUpload,
+    prepareBundledPlugin,
     installPendingPlugin,
     togglePlugin,
     restartPlugin,

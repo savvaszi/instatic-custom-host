@@ -38,6 +38,8 @@ What comes out the other end is the part most builders quietly compromise on: pl
 
 **MIT. Self-hosted. Yours.**
 
+This custom distribution also includes an owner-reviewed bundled plugin catalog with Social SEO and SMTP Form Delivery. The packages are available on every new installation under **Admin → Plugins** and remain inactive until the site owner reviews their permissions and installs them.
+
 <br>
 
 ## Deploy in one click

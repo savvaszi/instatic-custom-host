@@ -68,6 +68,55 @@
     gap: var(--space-px);
 }
 
+.bundledSection {
+    display: grid;
+    gap: var(--space-l);
+}
+
+.bundledSection h2,
+.bundledSection p,
+.bundledCard p {
+    margin: 0;
+}
+
+.bundledSection h2 {
+    font-size: var(--text-l);
+}
+
+.bundledSection > div:first-child > p,
+.bundledCard p,
+.bundledCard span {
+    color: var(--text-subtle);
+    font-size: var(--text-s);
+    line-height: 1.5;
+}
+
+.bundledGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: var(--space-px);
+    background: var(--bg-surface);
+}
+
+.bundledCard {
+    display: flex;
+    gap: var(--space-l);
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-xl);
+    border-radius: 16px;
+    background: var(--bg-surface-2);
+}
+
+.bundledCard > div {
+    display: grid;
+    gap: var(--space-3xs);
+}
+
+.bundledCard strong {
+    font-size: var(--text-m);
+}
+
 /* Plugin admin page body — same gap rhythm as the Plugins list. The
    layout provides the page header (title + plugin name as description)
    so the inner content goes straight to the substantive UI. */
